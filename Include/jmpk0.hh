@@ -1,6 +1,3 @@
-// need a return value or the compiler comlains.
-// This is probably not the best pratice.
-
 class jmpk0 : public Fjk
 {
     public:
