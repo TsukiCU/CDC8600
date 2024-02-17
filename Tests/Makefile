@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-BLAS_1		= dcopy zcopy drot zdrot zaxpy dscal zdotu zswap ddot zdotc idamax dasum
-=======
-BLAS_1		= dcopy zcopy drot zdrot zaxpy dscal zdotu zswap ddot zdotc idamax
->>>>>>> upstream/main
+BLAS_1		= dcopy zcopy drot zdrot zaxpy dscal zdotu zswap ddot zdotc idamax dasum zscal daxpy
 BLAS		= ${BLAS_1}
 TESTS 		= ${BLAS}
 CCC			= g++

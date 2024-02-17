@@ -10,7 +10,7 @@ using namespace CDC8600;
 extern "C" f64 dasum_(i32*, f64*, i32*);
 
 const int N = 20;
-const double epsilon = pow(1, -9);
+const double epsilon = 1e-9;
 
 void test_dasum()
 {
