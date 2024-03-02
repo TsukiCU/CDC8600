@@ -9,7 +9,7 @@
 
 // 1. Branch Facility
 
-#define LABEL(L) L : instructions::forcealign = __LINE__; addlabel(#L, __LINE__); 
+#define LABEL(L) L : PROC[me()].instr_forcealign = __LINE__; addlabel(#L, __LINE__); 
 
 #define jmp(L)			if (process(new  instructions::jmp   (#L), __LINE__))      goto L;
 
@@ -21,13 +21,13 @@
 
 #define jmpz(Xj,L)		if (process(new instructions::jmpz   (Xj,  #L), __LINE__)) goto L;
 
-#define jmpnz(Xj,L)		if (process(new instructions::jmpnz  (Xj,  0), __LINE__)) goto L;
+#define jmpnz(Xj,L)		if (process(new instructions::jmpnz  (Xj,  #L), __LINE__)) goto L;
 
 #define jmpp(Xj,L)		if (process(new instructions::jmpp   (Xj,  #L), __LINE__)) goto L;
 
-#define jmpn(Xj,L)		if (process(new instructions::jmpn   (Xj,  0), __LINE__)) goto L;
+#define jmpn(Xj,L)		if (process(new instructions::jmpn   (Xj,  #L), __LINE__)) goto L;
 
-#define bb(Xj,Xk,L)		if (process(new instructions::bb     (Xj, Xk), __LINE__)) goto L;
+#define bb(Xj,Xk,L)		if (process(new instructions::bb     (Xj, Xk, #L), __LINE__)) goto L;
 
 #define call(Xj,func)		if (process(new instructions::call   (Xj), __LINE__))     func ();
 

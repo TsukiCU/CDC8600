@@ -30,6 +30,8 @@ void test_drot(int count)
     int32_t nx = 1 + n * abs(incx); // not n * abs(incx)
     int32_t ny = 1 + n * abs(incy); // not n * abs(incy)
 
+    tracing = false; if (n < 10) tracing = true;
+
     f64 *x = (f64*)CDC8600::memalloc(nx);
     f64 *y = (f64*)CDC8600::memalloc(ny);
     f64 *X = new f64[nx];
@@ -61,13 +63,20 @@ void test_drot(int count)
     delete [] X;
     delete [] Y;
 
-    cout << "drot [" << setw(2) << count << "] (n = " << setw(3) << n << ", incx = " << setw(2) << incx << ", incy = " << setw(2) << incy << ", c = " << setw(2) << c << ", s = " << setw(2) << s << ", # of instr = " << setw(9) << instructions::count <<  ") : ";
+    cout << "drot [" << setw(2)<< count << "] ";
+    cout << "(n = " << setw(3) << n;
+    cout << ", incx = " << setw(2) << incx;
+    cout << ", incy = " << setw(2) << incy;
+    cout << ", c = " << setw(2) << c << ", s = " << setw(2) << s;
+    cout << ", # of instr = " << setw(9) << PROC[0].instr_count;
+    cout << ", # of cycles = " << setw(9) << PROC[0].op_maxcycle;
+    cout <<  ") : ";
     if (pass)
         cout << "PASS" << std::endl;
     else
         cout << "FAIL" << std::endl;
     
-    if (n < 10) dump(trace);
+    if (n < 10) dump(PROC[0].trace);
 }
 
 int main()

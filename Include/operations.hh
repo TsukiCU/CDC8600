@@ -7,15 +7,11 @@ namespace CDC8600
 {
     namespace operations
     {
-	extern u64 		count;		// operation count
-	extern u64 		nextdispatch;	// next dispatch cycle
-	extern u64		maxcycle;	// maximum completion cycle
 	extern vector<u64>	MEMready;	// ready cycles for memory locations
-	extern vector<u64>	REGready;	// ready cycles for registers
 
 	class operation
 	{
-	     private:
+	     protected:
 		 u64 _count;	// operation #
 		 u64 _ready;    // inputs ready
 		 u64 _dispatch;	// dispatch time
@@ -27,7 +23,7 @@ namespace CDC8600
 
 		 virtual    u64 complete() const { return _complete; }	// operation completion cycle
 		 virtual    u64 ready() const = 0; 			// time inputs are ready
-		 virtual    u64 target(u64 cycle) = 0;			// update ready time of output
+		 virtual    void target(u64 cycle) = 0;			// update ready time of output
 		 virtual    u64 latency() const = 0; 			// operation latency
 		 virtual    u64 throughput() const = 0; 		// operation inverse throughput
 		 virtual string mnemonic() const = 0;			// operation mnemonic
@@ -77,9 +73,9 @@ namespace CDC8600
 		     return &(units()[minfu]);
 		 }
 
-		 virtual   bool process(u64 dispatch)		// process this operation
+		 virtual   void process(u64 dispatch)		// process this operation
 		 {
-		     _count = count;				// current instruction count
+		     _count = PROC[me()].op_count;				// current instruction count
 		     _dispatch = dispatch;                      // remember dispatch time
 		     _ready = ready();				// check ready time for inputs
 		     _issue = max(_ready, dispatch);		// account for operation dispatch
@@ -91,36 +87,36 @@ namespace CDC8600
 		 }
 	};
 
-	bool process(operation *op);
+	void process(operation *op);
 
 	class FXop : public operation
 	{
 	    public:
-		vector<units::unit>& units() { return units::FXUs; }
+		vector<units::unit>& units() { return PROC[me()].FXUs; }
 	};
 
 	class FPop : public operation
 	{
 	    public:
-		vector<units::unit>& units() { return units::FPUs; }
+		vector<units::unit>& units() { return PROC[me()].FPUs; }
 	};
 
 	class LDop : public operation
 	{
 	    public:
-		vector<units::unit>& units() { return units::LDUs; }
+		vector<units::unit>& units() { return PROC[me()].LDUs; }
 	};
 
 	class STop : public operation
 	{
 	    public:
-		vector<units::unit>& units() { return units::STUs; }
+		vector<units::unit>& units() { return PROC[me()].STUs; }
 	};
 
 	class BRop : public operation
 	{
 	    public:
-		vector<units::unit>& units() { return units::BRUs; }
+		vector<units::unit>& units() { return PROC[me()].BRUs; }
 	};
 
 	class xkj : public FXop
@@ -132,9 +128,9 @@ namespace CDC8600
 	    public:
 		xkj(u08 j, u08 k) { _j = j; _k = k; }
 		u64 ready() const { return 0; }
-		u64 target(u64 cycle) { REGready[_j] = cycle; }
+		void target(u64 cycle) { PROC[me()].REGready[_j] = cycle; }
 		u64 latency() const { return 2; }
-		u64 throughput() const { return 2; }
+		u64 throughput() const { return 1; }
 		string mnemonic() const { return "xkj"; }
 		string dasm() const { return mnemonic() + "(" + to_string(_j) + ", " + to_string(_k) + ")"; }
 	};
@@ -147,8 +143,8 @@ namespace CDC8600
 
 	    public:
 		idzkj(u08 j, u08 k) { _j = j; _k = k; }
-		u64 ready() const { return REGready[_k]; }
-		u64 target(u64 cycle) { REGready[_j] = cycle; }
+		u64 ready() const { return PROC[me()].REGready[_k]; }
+		void target(u64 cycle) { PROC[me()].REGready[_j] = cycle; }
 		u64 latency() const { return 2; }
 		u64 throughput() const { return 1; }
 		string mnemonic() const { return "idzkj"; }
@@ -163,12 +159,29 @@ namespace CDC8600
 
 	    public:
 		idjkj(u08 j, u08 k) { _j = j; _k = k; }
-		u64 ready() const { return REGready[_j]; }
-		u64 target(u64 cycle) { REGready[_j] = cycle; }
+		u64 ready() const { return PROC[me()].REGready[_j]; }
+		void target(u64 cycle) { PROC[me()].REGready[_j] = cycle; }
 		u64 latency() const { return 2; }
 		u64 throughput() const { return 1; }
 		string mnemonic() const { return "idjkj"; }
 		string dasm() const { return mnemonic() + "(" + to_string(_j) + ", " + to_string(_k) + ")"; }
+	};
+
+        class idjki : public FXop
+	{
+	    private:
+		u08	_i;
+		u08	_j;
+		u08	_k;
+
+	    public:
+		idjki(u08 i, u08 j, u08 k) { _i = i; _j = j; _k = k; }
+		u64 ready() const { return max(PROC[me()].REGready[_k], PROC[me()].REGready[_j]); }
+		void target(u64 cycle) { PROC[me()].REGready[_i] = cycle; }
+		u64 latency() const { return 2; }
+		u64 throughput() const { return 1; }
+		string mnemonic() const { return "idjki"; }
+		string dasm() const { return mnemonic() + "(" + to_string(_i) + ", " + to_string(_j) + ", " + to_string(_k) + ")"; }
 	};
 
 	class isjkj : public FXop
@@ -179,8 +192,8 @@ namespace CDC8600
 
 	    public:
 		isjkj(u08 j, u08 k) { _j = j; _k = k; }
-		u64 ready() const { return max(REGready[_k], REGready[_j]); }
-		u64 target(u64 cycle) { REGready[_j] = cycle; }
+		u64 ready() const { return max(PROC[me()].REGready[_k], PROC[me()].REGready[_j]); }
+		void target(u64 cycle) { PROC[me()].REGready[_j] = cycle; }
 		u64 latency() const { return 2; }
 		u64 throughput() const { return 1; }
 		string mnemonic() const { return "isjkj"; }
@@ -196,8 +209,8 @@ namespace CDC8600
 
 	    public:
 		isjki(u08 i, u08 j, u08 k) { _i = i; _j = j; _k = k; }
-		u64 ready() const { return max(REGready[_k], REGready[_j]); }
-		u64 target(u64 cycle) { REGready[_i] = cycle; }
+		u64 ready() const { return max(PROC[me()].REGready[_k], PROC[me()].REGready[_j]); }
+		void target(u64 cycle) { PROC[me()].REGready[_i] = cycle; }
 		u64 latency() const { return 2; }
 		u64 throughput() const { return 1; }
 		string mnemonic() const { return "isjki"; }
@@ -213,8 +226,8 @@ namespace CDC8600
 
 	    public:
 		agen(u08 i, u08 j, u08 k) { _i = i; _j = j; _k = k; }
-		u64 ready() const { return max(max(REGready[_k], REGready[_j]), max(REGready[params::micro::RA], REGready[params::micro::FL])); }
-		u64 target(u64 cycle) { REGready[_i] = cycle; }
+		u64 ready() const { return max(max(PROC[me()].REGready[_k], PROC[me()].REGready[_j]), max(PROC[me()].REGready[params::micro::RA], PROC[me()].REGready[params::micro::FL])); }
+		void target(u64 cycle) { PROC[me()].REGready[_i] = cycle; }
 		u64 latency() const { return 2; }
 		u64 throughput() const { return 2; }
 		string mnemonic() const { return "agen"; }
@@ -230,9 +243,9 @@ namespace CDC8600
 
 	    public:
 		rdw(u08 j, u08 k, u32 addr) { _j = j; _k = k; _addr = addr; }
-		u64 ready() const { return max(REGready[_k], MEMready[_addr]); }
-		u64 target(u64 cycle) { REGready[_j] = cycle; }
-		u64 latency() const { return 30; }
+		u64 ready() const { return max(PROC[me()].REGready[_k], MEMready[_addr]); }
+		void target(u64 cycle) { PROC[me()].REGready[_j] = cycle; }
+		u64 latency() const { return PROC[me()].L1D.loadhit(_addr, _issue) ? params::L1::latency : params::MEM::latency; }
 		u64 throughput() const { return 1; }
 		string mnemonic() const { return "rdw"; }
 		string dasm() const { return mnemonic() + "(" + to_string(_j) + ", " + to_string(_addr) + ")"; }
@@ -247,9 +260,9 @@ namespace CDC8600
 
 	    public:
 		stw(u08 j, u08 k, u32 addr) { _j = j; _k = k; _addr = addr; }
-		u64 ready() const { return max(REGready[_k], REGready[_j]); }
-		u64 target(u64 cycle) { MEMready[_addr] = cycle; }
-		u64 latency() const { return 30; }
+		u64 ready() const { return max(PROC[me()].REGready[_k], PROC[me()].REGready[_j]); }
+		void target(u64 cycle) { MEMready[_addr] = cycle; }
+		u64 latency() const { return PROC[me()].L1D.storehit(_addr, _issue) ? params::L1::latency : params::MEM::latency; }
 		u64 throughput() const { return 1; }
 		string mnemonic() const { return "stw"; }
 		string dasm() const { return mnemonic() + "(" + to_string(_j) + ", " + to_string(_addr) + ")"; }
@@ -263,8 +276,8 @@ namespace CDC8600
 
 	    public:
 		ipjkj(u08 j, u08 k) { _j = j; _k = k; }
-		u64 ready() const { return max(REGready[_k], REGready[_j]); }
-		u64 target(u64 cycle) { REGready[_j] = cycle; }
+		u64 ready() const { return max(PROC[me()].REGready[_k], PROC[me()].REGready[_j]); }
+		void target(u64 cycle) { PROC[me()].REGready[_j] = cycle; }
 		u64 latency() const { return 2; }
 		u64 throughput() const { return 1; }
 		string mnemonic() const { return "ipjkj"; }
@@ -278,12 +291,28 @@ namespace CDC8600
 
 	    public:
 		cmpz(u08 j) { _j = j; }
-		u64 ready() const { return REGready[_j]; }
-		u64 target(u64 cycle) { REGready[params::micro::CMPFLAGS] = cycle; }
+		u64 ready() const { return PROC[me()].REGready[_j]; }
+		void target(u64 cycle) { PROC[me()].REGready[params::micro::CMPFLAGS] = cycle; }
 		u64 latency() const { return 1; }
 		u64 throughput() const { return 1; }
 		string mnemonic() const { return "cmpz"; }
 		string dasm() const { return mnemonic() + "(" + to_string(_j) + ")"; }
+	};
+
+	class cmp : public FXop
+	{
+	    private:
+	        u08 _j;
+	        u08 _k;
+
+	    public:
+		cmp(u08 j, u08 k) { _j = j;  _k = k; }
+		u64 ready() const { return max(PROC[me()].REGready[_j], PROC[me()].REGready[_k]); }
+		void target(u64 cycle) { PROC[me()].REGready[params::micro::CMPFLAGS] = cycle; }
+		u64 latency() const { return 1; }
+		u64 throughput() const { return 1; }
+		string mnemonic() const { return "cmp"; }
+		string dasm() const { return mnemonic() + "(" + to_string(_j) + ", " + to_string(_k) + ")"; }
 	};
 
 	class jmp : public BRop
@@ -293,7 +322,7 @@ namespace CDC8600
 	    public:
 		jmp() { }
 		u64 ready() const { return 0; }
-		u64 target(u64 cycle) { nextdispatch = cycle; }
+		void target(u64 cycle) { PROC[me()].op_nextdispatch = cycle; }
 		u64 latency() const { return 1; }
 		u64 throughput() const { return 1; }
 		string mnemonic() const { return "jmp"; }
@@ -308,8 +337,8 @@ namespace CDC8600
 
 	    public:
 		jmpk(u08 j, u08 k) { _j = j; _k = k; }
-		u64 ready() const { return REGready[_j]; }
-		u64 target(u64 cycle) { nextdispatch = cycle; }
+		u64 ready() const { return PROC[me()].REGready[_j]; }
+		void target(u64 cycle) { PROC[me()].op_nextdispatch = cycle; }
 		u64 latency() const { return 1; }
 		u64 throughput() const { return 1; }
 		string mnemonic() const { return "jmpk"; }
@@ -322,11 +351,25 @@ namespace CDC8600
 
 	    public:
 		jmpz() { }
-		u64 ready() const { return REGready[params::micro::CMPFLAGS]; }
-		u64 target(u64 cycle) { nextdispatch = cycle; }
+		u64 ready() const { return PROC[me()].REGready[params::micro::CMPFLAGS]; }
+		void target(u64 cycle) { PROC[me()].op_nextdispatch = cycle; }
 		u64 latency() const { return 1; }
 		u64 throughput() const { return 1; }
 		string mnemonic() const { return "jmpz"; }
+		string dasm() const { return mnemonic() + "(" + ")"; }
+	};
+
+        class jmpnz : public BRop
+	{
+	    private:
+
+	    public:
+		jmpnz() { }
+		u64 ready() const { return PROC[me()].REGready[params::micro::CMPFLAGS]; }
+		void target(u64 cycle) { PROC[me()].op_nextdispatch = cycle; }
+		u64 latency() const { return 1; }
+		u64 throughput() const { return 1; }
+		string mnemonic() const { return "jmpnz"; }
 		string dasm() const { return mnemonic() + "(" + ")"; }
 	};
 
@@ -336,13 +379,93 @@ namespace CDC8600
 
 	    public:
 		jmpp() { }
-		u64 ready() const { return REGready[params::micro::CMPFLAGS]; }
-		u64 target(u64 cycle) { nextdispatch = cycle; }
+		u64 ready() const { return PROC[me()].REGready[params::micro::CMPFLAGS]; }
+		void target(u64 cycle) { PROC[me()].op_nextdispatch = cycle; }
 		u64 latency() const { return 1; }
 		u64 throughput() const { return 1; }
 		string mnemonic() const { return "jmpp"; }
 		string dasm() const { return mnemonic() + "(" + ")"; }
 	};
+
+	class jmpn : public BRop
+	{
+	    private:
+
+	    public:
+		jmpn() { }
+		u64 ready() const { return PROC[me()].REGready[params::micro::CMPFLAGS]; }
+		void target(u64 cycle) { PROC[me()].op_nextdispatch = cycle; }
+		u64 latency() const { return 1; }
+		u64 throughput() const { return 1; }
+		string mnemonic() const { return "jmpn"; }
+		string dasm() const { return mnemonic() + "(" + ")"; }
+	};
+
+	class bb : public BRop
+	{
+	    private:
+		u08	_i;
+
+	    public:
+		bb(u08 i) { _i = i;}
+		u64 ready() const { return PROC[me()].REGready[params::micro::CMPFLAGS]; }
+		void target(u64 cycle) { PROC[me()].op_nextdispatch = cycle; }
+		u64 latency() const { return 1; }
+		u64 throughput() const { return 1; }
+		string mnemonic() const { return "bb"; }
+		string dasm() const { return mnemonic() + "(" + to_string(_i) + ")"; }
+	};
+
+        class fadd : public FPop
+        {
+	    private:
+		u08	_i;
+		u08	_j;
+		u08	_k;
+
+	    public:
+		fadd(u08 i, u08 j, u08 k) { _i = i; _j = j; _k = k; }
+		u64 ready() const { return max(PROC[me()].REGready[_k], PROC[me()].REGready[_j]); }
+		void target(u64 cycle) { PROC[me()].REGready[_i] = cycle; }
+		u64 latency() const { return 2; }
+		u64 throughput() const { return 2; }
+		string mnemonic() const { return "fadd"; }
+		string dasm() const { return mnemonic() + "(" + to_string(_i) + ", " + to_string(_j) + ", " + to_string(_k) + ")"; }
+        };
+
+        class fmul : public FPop
+        {
+	    private:
+		u08	_i;
+		u08	_j;
+		u08	_k;
+
+	    public:
+		fmul(u08 i, u08 j, u08 k) { _i = i; _j = j; _k = k; }
+		u64 ready() const { return max(PROC[me()].REGready[_k], PROC[me()].REGready[_j]); }
+		void target(u64 cycle) { PROC[me()].REGready[_i] = cycle; }
+		u64 latency() const { return 2; }
+		u64 throughput() const { return 2; }
+		string mnemonic() const { return "fmul"; }
+		string dasm() const { return mnemonic() + "(" + to_string(_i) + ", " + to_string(_j) + ", " + to_string(_k) + ")"; }
+        };
+
+        class fsub : public FPop
+        {
+	    private:
+		u08	_i;
+		u08	_j;
+		u08	_k;
+
+	    public:
+		fsub(u08 i, u08 j, u08 k) { _i = i; _j = j; _k = k; }
+		u64 ready() const { return max(PROC[me()].REGready[_k], PROC[me()].REGready[_j]); }
+		void target(u64 cycle) { PROC[me()].REGready[_i] = cycle; }
+		u64 latency() const { return 2; }
+		u64 throughput() const { return 2; }
+		string mnemonic() const { return "fsub"; }
+		string dasm() const { return mnemonic() + "(" + to_string(_i) + ", " + to_string(_j) + ", " + to_string(_k) + ")"; }
+        };
     } // namespace operations
 } // namespace CDC8600
 
